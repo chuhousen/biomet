@@ -22,7 +22,7 @@ The WETLAND data and CIMIS data was averaged over consecutive 16 day periods and
 ---
 
 ### Installing
-Highly recommended `virutalenv`: `pip install virtualenv`
+Highly recommended `virtualenv`: `pip install virtualenv`
 
 ```
 git clone https://github.com/bsuper/biomet.git
