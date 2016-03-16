@@ -1,9 +1,10 @@
 import pandas as pd
 import numpy as np
 import scipy.io as sio
-from sklearn import preprocessing
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.cross_validation import KFold, cross_val_score
+from sklearn import preprocessing, metrics
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.cross_validation import KFold, cross_val_score, train_test_split
+import skflow
 
 NDVI_DATAFILE = "input/ndvi.csv"
 WETLAND_DATAFILE = "input/WP_2012195to2015126_L3.mat"
@@ -42,7 +43,6 @@ def process_ndvi(data_file=NDVI_DATAFILE):
     return pd.DataFrame(df2)
 
 def process_wetland(data_file=WETLAND_DATAFILE):
-    #import pdb; pdb.set_trace()
     # data
     data = sio.loadmat(data_file)
     # general flux data
@@ -114,42 +114,79 @@ def ch4_create_XY(combined_data):
     X = preprocessing.scale(X)
     return X, Y, cols
 
-def train(X, Y, print_oob_score=True, regressor=RandomForestRegressor(n_estimators=200, max_features='sqrt', oob_score=True)):
+def train(X, Y, regressor=RandomForestRegressor(n_estimators=200, max_features='sqrt', oob_score=True)):
     regressor.fit(X, Y)
-    if print_oob_score:
-        print "Out of bag score", regressor.oob_score_
     return regressor
 
-def cross_validation(X, Y, n_folds=3):
+def cross_validation(X, Y, n_folds=10, regressor=RandomForestRegressor(n_estimators=200, max_features='sqrt', oob_score=True)):
     kf = KFold(X.shape[0], n_folds=n_folds, shuffle=True)
     scores = []
     for train_indices, test_indices in kf:
-        regressor = train(X[train_indices], Y[train_indices], print_oob_score=False)
-        # print "Feature importances: ", regressor.feature_importances_
+        regressor = train(X[train_indices], Y[train_indices], regressor=regressor)
         score = regressor.score(X[test_indices], Y[test_indices])
         print "Cross validation w/ ", n_folds, "folds - score: ", score
         scores.append(score)
     print "Average Cross Validation Score w/ ", n_folds, "folds -", np.mean(scores)
 
+def run_models(X, Y, cols, nn_lr=0.1, nn_steps=500, test_size=0.1):
+    print "Random Forests Regressor..."
+    cross_validation(X, Y, regressor=RandomForestRegressor(n_estimators=200, max_features='sqrt', oob_score=True))
+    regressor = train(X, Y, regressor=RandomForestRegressor(n_estimators=200, max_features='sqrt', oob_score=True))
+    print "Out of bag score", regressor.oob_score_
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=test_size, random_state=42)
+    regressor = train(X_train, Y_train, regressor=RandomForestRegressor(n_estimators=200, max_features='sqrt', oob_score=True))
+    print "Train/test split: ", "{0}/{1}".format(1 - test_size, test_size), "Score: ", regressor.score(X_test, Y_test)
+    print dict(zip(cols, regressor.feature_importances_))
+
+    print "--------------"
+
+    print "Gradient Boosting Regressor..."
+    cross_validation(X, Y, regressor=GradientBoostingRegressor(n_estimators=100, max_features='sqrt', learning_rate=0.1, loss='ls'))
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=test_size, random_state=42)
+    regressor = train(X_train, Y_train, regressor=GradientBoostingRegressor(n_estimators=100, max_features='sqrt', learning_rate=0.1, loss='ls'))
+    print "Train/test split: ", "{0}/{1}".format(1 - test_size, test_size), "Score: ", regressor.score(X_test, Y_test)
+    print dict(zip(cols, regressor.feature_importances_))
+
+    print "--------------"
+    print "Neural Network"
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=test_size, random_state=42)
+    regressors = []
+    # options = [[10], [10, 10], [20, 20]]
+    options = [[20, 20]]
+    for hidden_units in options:
+        def tanh_dnn(X, y):
+            features = skflow.ops.dnn(X, hidden_units=hidden_units,
+              activation=skflow.tf.tanh)
+            return skflow.models.linear_regression(features, y)
+
+        regressor = skflow.TensorFlowEstimator(model_fn=tanh_dnn, n_classes=0,
+            steps=nn_steps, learning_rate=nn_lr, batch_size=100)
+        regressor.fit(X_train, Y_train)
+        score = metrics.mean_squared_error(regressor.predict(X_train), Y_train)
+        print("Mean Squared Error for {0}: {1:f}".format(str(hidden_units), score))
+        regressors.append(regressor)
+
+    print "Train/test split: ", "{0}/{1}".format(1 - test_size, test_size)
+    print "Hidden layer :", options[0], metrics.r2_score(Y_test, regressors[0].predict(X_test))
+    # print "Hidden layer :", options[1], metrics.r2_score(Y_test, regressors[1].predict(X_test))
+    # print "Hidden layer :", options[2], metrics.r2_score(Y_test, regressors[2].predict(X_test))
+
+
 def co2():
     combined_data = combine_all_data()
     X, Y, cols = co2_create_XY(combined_data)
-    cross_validation(X, Y)
-    regressor = train(X, Y)
-    print dict(zip(cols, regressor.feature_importances_))
-    return regressor
+    run_models(X, Y, cols)
+
 
 def ch4():
     combined_data = combine_all_data()
     X, Y, cols = ch4_create_XY(combined_data)
-    cross_validation(X, Y)
-    regressor = train(X, Y)
-    print dict(zip(cols, regressor.feature_importances_))
-    return regressor
+    run_models(X, Y, cols, nn_lr=.1, nn_steps=100000)
+
 
 if __name__ == "__main__":
-    print "Running CO2 Regression..."
-    co2_rgr = co2()
+    print "=====Running CO2 Regression====="
+    co2()
     print ""
-    print "Running CH4 Regression..."
-    ch4_rgr = ch4()
+    print "=====Running CH4 Regression====="
+    ch4()
