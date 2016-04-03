@@ -42,6 +42,7 @@ def visualize_preds(df, Y_test, Y_pred, test_years=None):
     plt.scatter(x, Y_test, color='green', label="True value")
     plt.scatter(x, Y_pred, color='red', label="Predicted value")
     plt.legend(loc='best')
+    plt.xlabel("doy")
     plt.show()
 
 #########################################
