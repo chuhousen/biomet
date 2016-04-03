@@ -4,11 +4,17 @@ from sklearn.utils import shuffle
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.svm import SVR
 from sklearn.cross_validation import cross_val_score, KFold
+import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 import pandas as pd
 import random
 import operator
 import skflow
+import exp
+
+sns.set_style("whitegrid")
+sns.set_palette("bright")
 
 ###############################################
 # PREPROCESS
@@ -19,6 +25,24 @@ def preprocess(X, Y):
     X = scaler.transform(X)
     X, Y = shuffle(X, Y, random_state=random.randint(0, 1000))
     return X, Y, scaler
+
+def predict(clf, X_train, Y_train, X_test, Y_test):
+    X_train, Y_train, scaler = preprocess(X_train, Y_train)
+    clf.fit(X_train, Y_train)
+    X_test = scaler.transform(X_test)
+    Y_pred = clf.predict(X_test)
+    score = metrics.r2_score(Y_test, Y_pred)
+    print "R2-score: ", score
+    return Y_pred
+
+def visualize_preds(df, Y_test, Y_pred, test_years=None):
+    if test_years:
+        df = exp.filter_df_by_years(df, test_years)
+    x = df["doy"]
+    plt.scatter(x, Y_test, color='green', label="True value")
+    plt.scatter(x, Y_pred, color='red', label="Predicted value")
+    plt.legend(loc='best')
+    plt.show()
 
 #########################################
 # RANDOM FORESTS

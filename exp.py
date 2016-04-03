@@ -7,9 +7,17 @@ import numpy as np
 # FEATURIZE
 ###############################################
 
-def featurize(df, train_cols, test_col):
+def featurize(df, train_cols, test_col, years=None):
+    """
+    years - list of years (e.g. [2012, 2013]) to filter the data
+    """
+    if years:
+        df = filter_df_by_years(df, years)
     X, Y = np.array(df[train_cols]), np.ravel(np.array(df[test_col]))
     return X, Y
+
+def filter_df_by_years(df, years):
+    return df[reduce(lambda x, y: x | y, map(lambda year: df["year"] == year, years))]
 
 ###############################################
 # EXPERIMENT 1
