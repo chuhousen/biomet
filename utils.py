@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 import scipy.io as sio
 
+HALF_HOURLY_SCALE = 1800. / 1e6 # each sample is half-hourly, so multiply by 1800
+CARBON_SCALE = 1800. * 10e-6 * 12
+
 ###############################################
 # PROCESS VARIOUS DATA FILES
 ###############################################
@@ -70,18 +73,24 @@ def process_tower(filename, prefix="", interpolate_missing=True):
     df = {}
     df["doy"] = d['DOY'][:,0]
     df["year"] = d['year'][:,0]
-    # CO2 flux (umol m-2 s-1)
-    df[prefix + "co2_gf"] = d['wc_gf'][:,0]
-    # CH4 flux (nmol m-2 s-1)
-    df[prefix + "ch4_gf"] = d['wm_gf'][:,0]
-    # ER?
-    df[prefix + "er"] = d['er_ANNnight'][:,0]
-    # gross primary productivity
-    df[prefix + "gpp"] = d['gpp_ANNnight'][:,0]
-    # latent heat flux (W m-2)
-    df[prefix + "le"] = d['LE_gf'][:,0]
-    # sensible heat flux (W m-2)
-    df[prefix + "h"] = d['H_gf'][:,0]
+    # CO2 flux (umol m-2 s-1) => gC / m^2 / day
+    df[prefix + "co2_gf"] = d['wc_gf'][:,0] * CARBON_SCALE
+    # CH4 flux (nmol m-2 s-1) => mgC / m^2 / day
+    df[prefix + "ch4_gf"] = d['wm_gf'][:,0] * CARBON_SCALE
+    # ER => gC / m^2 / day
+    df[prefix + "er"] = d['er_ANNnight'][:,0] * CARBON_SCALE
+    # gross primary productivity => gC / m^2 / day
+    df[prefix + "gpp"] = d['gpp_ANNnight'][:,0] * CARBON_SCALE
+    # latent heat flux (W m-2) => Mj / m^2 / day
+    df[prefix + "le"] = d['LE_gf'][:,0] * HALF_HOURLY_SCALE
+    # sensible heat flux (W m-2) => Mj / m^2 / day
+    df[prefix + "h"] = d['H_gf'][:,0] * HALF_HOURLY_SCALE
+    # net radiation => Mj / m^2 / day
+    df[prefix + "RNET"] = df["RNET"][:,0] * HALF_HOURLY_SCALE
+    if "Rlong_in" in d:
+        # long-wave radiation => Mj / m^2 / day
+        df[prefix + "Rlong_in"] = df["Rlong_in"][:,0] * HALF_HOURLY_SCALE
+
     df = pd.DataFrame(df)
     grouped = df.groupby(["year", "doy"]).aggregate(np.sum).reset_index()
     if interpolate_missing:
@@ -112,7 +121,7 @@ def interpolate_missing_values(df):
         else:
             doy += 1
     df = pd.concat((df, pd.DataFrame(missing_rows)))
-    return df.sort_values(["year", "doy"]).reset_index(drop=True).interpolate()
+    return df.sort_values(["year", "doy"]).reset_index(drop=True).interpolate(method='spline')
 
 ###############################################
 # MERGE DATAFRAMES TOGETHER
