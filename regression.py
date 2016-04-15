@@ -3,7 +3,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.utils import shuffle
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.svm import SVR
-from sklearn.cross_validation import cross_val_score, KFold
+from sklearn.cross_validation import cross_val_score, KFold, train_test_split
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -43,6 +43,21 @@ def visualize_preds(df, Y_test, Y_pred, test_years=None):
     plt.scatter(x, Y_pred, color='red', label="Predicted value")
     plt.legend(loc='best')
     plt.xlabel("doy")
+    plt.show()
+
+def get_train_test_split(X, Y, test_size=0.33):
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, Y, test_size=test_size, random_state=random.randint(0, 1000))
+    return X_train, X_test, y_train, y_test
+
+def plot_true_vs_pred(Y_test, Y_pred):
+    plt.scatter(Y_test, Y_pred, color='green', label="True value")
+    min_val = np.min([np.min(Y_test), np.min(Y_pred)])
+    max_val = np.max([np.max(Y_test), np.max(Y_pred)])
+    plt.plot([min_val, max_val], [min_val, max_val], color='red')
+    plt.legend(loc='best')
+    plt.xlabel("Y_test")
+    plt.ylabel("Y_pred")
     plt.show()
 
 #########################################

@@ -10,24 +10,63 @@ CARBON_SCALE = 1800. * 10e-6 * 12
 ###############################################
 
 def process_cimis(filename, interpolate_missing=True):
+    """
+    Process Cimis Twitchell Island Tower Data
+
+    The file is aggrgated from CIMIS hourly files (2001/1-2016/4).
+    QC flags were left out for now, and new units were adopted here.
+
+    ETo 		(mm/day)
+    Precip		(mm/day)
+    Sol.Rad		(MJ/m2/day)
+    VPD		(kPa)
+    Air.Temp	(deg C)
+    Wind.Speed	(m/s)
+    Soil.Temp	(deg C)
+    """
     print "Processing {0}...".format(filename)
     df = pd.read_csv(filename)
-    # replace bad values with NaN
-    for col in ["Net Rad (W/sq.m)", "Avg Air Temp (C)", "Avg Soil Temp (C)"]:
-        qc = df.columns.get_loc(col) + 1
-        df.loc[df[df.columns[qc]] != ' ', col] = np.nan
     df2 = {}
-    df2['year'] = df['Date'].apply(lambda x: int(x[-4:]))
+    df2['year'] = df['Date'].apply(lambda x: int(x[:4]))
     df2['doy'] = df['Jul']
-    df2['net_rad'] = df['Net Rad (W/sq.m)']
-    df2['avg_air_temp'] = df['Avg Air Temp (C)']
-    df2['avg_soil_temp'] = df['Avg Soil Temp (C)']
+
+    # potential evapotranspiration (PET)
+    df2['PET'] = df['ETo']
+    # precipitation
+    df2['precip'] = df['Precip']
+    # shortwave radiation
+    df2['sw_in'] = df["Sol.Rad"]
+    # vapor pressure deficit
+    df2['VPD'] = df["VPD"]
+    # air Temp
+    df2['air_temp'] = df["Air.Temp"]
+    # wind speed
+    df2["wind_speed"] = df["Wind.Speed"]
+    # soil temp
+    df2["soil_temp"] = df["Soil.Temp"]
+
     df2 = pd.DataFrame(df2)
     if interpolate_missing:
         df2 = interpolate_missing_values(df2)
     return df2
 
 def process_modis_reflectance_veg_index(filename, prefix="", interpolate_missing=True):
+    """
+    Process MOD13Q1 Reflectance and Vegetation Index Data
+
+    MOD13Q1: 250m 16-day Relectance & Vegetation Indices
+    https://lpdaac.usgs.gov/dataset_discovery/modis/modis_products_table/mod13q1
+    YR: year
+    DOY: julian day (specified as the actual day of composite)
+    NDVI: normalized difference vegetation index
+    EVI: enhanced vegetation index
+    bnd3.ref: band 3 reflectance (459 - 479nm) blue
+    bnd7.ref: band 7 reflectance (2105 - 2155nm) MIR
+    bnd2.ref: band 2 reflectance (841 - 876nm) NIR
+    bnd1.ref: band 1 reflectance (620 - 670nm) red
+    QC: quality flag (0 as good data)
+    LSWI2: Land Surface Water Index (2130nm)
+    """
     print "Processing {0}...".format(filename)
     if prefix:
         prefix += "_"
@@ -39,7 +78,7 @@ def process_modis_reflectance_veg_index(filename, prefix="", interpolate_missing
     df2["year"] = df["YR"]
     df2[prefix + "ndvi"] = df["NDVI"]
     df2[prefix + "evi"] = df["EVI"]
-    df2[prefix + "lswi"] = df["LSWI"]
+    df2[prefix + "lswi2"] = df["LSWI2"]
     df2[prefix + "bnd1"] = df["bnd1.ref"]
     df2[prefix + "bnd2"] = df["bnd2.ref"]
     df2[prefix + "bnd3"] = df["bnd3.ref"]
@@ -50,6 +89,18 @@ def process_modis_reflectance_veg_index(filename, prefix="", interpolate_missing
     return df2
 
 def process_modis_lst_emissivity(filename, prefix="", interpolate_missing=True):
+    """
+    Processes MODIS MOD11A2
+
+    MOD11A2: 1km 8-day Land Surface Temperature & Emissivity
+    https://lpdaac.usgs.gov/dataset_discovery/modis/modis_products_table/mod11a2
+    YR: year
+    DOY: julian day (specified as the center day of composite period)
+    LST.day: daytime land surface temperature (deg C)
+    LST.night: nighttime land surface temperature (deg C)
+    QC.day: quality flag for LST.day (0 as good data)
+    QC.night: quality flag for LST.night (0 as good data)
+    """
     print "Processing {0}...".format(filename)
     if prefix:
         prefix += "_"
@@ -65,6 +116,9 @@ def process_modis_lst_emissivity(filename, prefix="", interpolate_missing=True):
     return df
 
 def process_tower(filename, prefix="", interpolate_missing=True):
+    """
+    Process Tower Data
+    """
     print "Processing {0}...".format(filename)
     if prefix:
         prefix += "_"
@@ -86,16 +140,35 @@ def process_tower(filename, prefix="", interpolate_missing=True):
     # sensible heat flux (W m-2) => Mj / m^2 / day
     df[prefix + "h"] = d['H_gf'][:,0] * HALF_HOURLY_SCALE
     # net radiation => Mj / m^2 / day
-    df[prefix + "RNET"] = df["RNET"][:,0] * HALF_HOURLY_SCALE
-    if "Rlong_in" in d:
-        # long-wave radiation => Mj / m^2 / day
-        df[prefix + "Rlong_in"] = df["Rlong_in"][:,0] * HALF_HOURLY_SCALE
+    df[prefix + "RNET"] = d["RNET"][:,0] * HALF_HOURLY_SCALE
 
     df = pd.DataFrame(df)
     grouped = df.groupby(["year", "doy"]).aggregate(np.sum).reset_index()
     if interpolate_missing:
         grouped = interpolate_missing_values(grouped)
     return grouped
+
+def process_tower_lwi(filename, prefix="", interpolate_missing=True):
+    """
+    Process Tower LWI data
+
+    [2016-04-14_daily_TOWER_LW.csv]
+    The data stream is derived from West Pond (Tw1) and Shermand Island (Snd) sites.
+
+    LW_IN.wp	(MJ/m2/day)
+    LW_IN.si	(MJ/m2/day)
+    LW_IN		(MJ/m2/day)
+    """
+    print "Processing {0}...".format(filename)
+    if prefix:
+        prefix += "_"
+    df = pd.read_csv(filename)
+    del df["Time.id"]
+    df.rename(columns={"YEAR": "year", "DOY": "doy", "LW_IN.wp": prefix + "LW_IN.wp",
+                        "LW_IN.si": prefix + "LW_IN.si", "LW_IN": prefix + "LW_IN"}, inplace=True)
+    if interpolate_missing:
+        df = interpolate_missing_values(df)
+    return df
 
 ###############################################
 # INTERPOLATE MISSING DATA
@@ -121,7 +194,7 @@ def interpolate_missing_values(df):
         else:
             doy += 1
     df = pd.concat((df, pd.DataFrame(missing_rows)))
-    return df.sort_values(["year", "doy"]).reset_index(drop=True).interpolate(method='spline')
+    return df.sort_values(["year", "doy"]).reset_index(drop=True).interpolate(method='spline', order=2)
 
 ###############################################
 # MERGE DATAFRAMES TOGETHER
