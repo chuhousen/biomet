@@ -26,11 +26,11 @@ def preprocess(X, Y):
     X, Y = shuffle(X, Y, random_state=random.randint(0, 1000))
     return X, Y, scaler
 
-def predict(clf, X_train, Y_train, X_test, Y_test):
+def predict(regr, X_train, Y_train, X_test, Y_test):
     X_train, Y_train, scaler = preprocess(X_train, Y_train)
-    clf.fit(X_train, Y_train)
+    regr.fit(X_train, Y_train)
     X_test = scaler.transform(X_test)
-    Y_pred = clf.predict(X_test)
+    Y_pred = regr.predict(X_test)
     score = metrics.r2_score(Y_test, Y_pred)
     print "R2-score: ", score
     return Y_pred
@@ -133,16 +133,15 @@ def dnn(nn_lr=0.1, nn_steps=5000, hidden_units=[30, 30]):
         steps=nn_steps, learning_rate=nn_lr, batch_size=100)
     return regressor
 
-def dnn_cross_val(X, Y, k=10):
+def dnn_cross_val(X, Y, regr=dnn(), k=10):
     print "Running Neural Network Cross Validation..."
-    clf = dnn()
     cv_scores = []
     for train_indices, test_indices in KFold(X.shape[0], n_folds=k, shuffle=True, random_state=random.randint(0, 1000)):
         X_train, X_test = X[train_indices], X[test_indices]
         Y_train, Y_test = Y[train_indices], Y[test_indices]
-        clf.fit(X_train, Y_train)
-        score = metrics.r2_score(Y_test, clf.predict(X_test))
+        regr.fit(X_train, Y_train)
+        score = metrics.r2_score(Y_test, regr.predict(X_test))
         cv_scores.append(score)
     print "{0}-fold CV Acc Mean: ".format(k), np.mean(cv_scores)
     print "CV Scores: ", ", ".join(map(str, cv_scores))
-    return clf
+    return regr
